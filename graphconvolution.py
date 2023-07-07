@@ -3,6 +3,7 @@ import math
 import torch
 import random
 import numpy as np
+import pandas as pd
 import torch.nn as nn
 from openeye import oechem
 from typing import List, Tuple
@@ -15,9 +16,11 @@ def onek_encoding_unk(x, allowable_set):
         x = allowable_set[-1]
     return [x == s for s in allowable_set]
 
-def mol2vec_gen(smiles, idx, mol2vec_pd):
+def mol2vec_genenrate(smiles:str,
+                    atom_idx:int, 
+                    mol2vec_pd):
     mol2vec = mol2vec_pd.query("input_washed_smiles == @smiles").reset_index(drop=True)
-    return np.hstack(mol2vec.loc[0, idx]).tolist()
+    return np.hstack(mol2vec.loc[0, atom_idx]).tolist()
 
 def bond_generate(bond):
     if bond.IsAromatic():
@@ -53,7 +56,9 @@ class MolGraph:
     - a2b: A mapping from an atom index to a list of bond indices.
     """
 
-    def __init__(self, smiles:str, mol2vec=None):
+    def __init__(self, 
+                smiles:str, 
+                mol2vec:pd.DataFrame):
 
         if smiles == "None":
             self.n_atoms, self.n_bonds = 0, 0
@@ -72,7 +77,7 @@ class MolGraph:
             for s_smile in sep_smiles:
                 for s_atom in SmilesToOEGraphMol(s_smile).GetAtoms():
                     idx = s_atom.GetIdx()
-                    f_atoms = mol2vec_gen(s_smile, idx, mol2vec)
+                    f_atoms = mol2vec_genenrate(s_smile, idx, mol2vec)
                     self.f_atoms[idx + mid_idx] = f_atoms
 
                 mid_idx += idx+1
@@ -82,67 +87,6 @@ class MolGraph:
                 neigh = [a for a in atom1.GetAtoms()]
                 self.a2a[atom1.GetIdx()] = [a.GetIdx() for a in neigh]
                 
-                bonds = [mol.GetBond(atom1, atom2) for atom2 in neigh]
-                bond_idx = [bond.GetIdx() for bond in bonds]
-                self.a2b[atom1.GetIdx()] = bond_idx
-
-                for b_id, bond in zip(bond_idx, bonds):
-                    
-                    f_bond = bond_generate(bond)
-                    self.f_bonds[b_id] = f_bond
-
-class AugMolGraph:
-
-    def __init__(self, smiles: str, args: dict, seed=0):
-        """
-        Computes the graph structure and featurization of a molecule.
-        :param smiles: A smiles string.
-        :param args: Arguments.
-        """
-        if smiles == "None":
-            self.n_atoms, self.n_bonds = 0, 0
-            self.f_atoms, self.f_bonds = [], []
-            self.a2a, self.a2b = [], []
-
-        else:
-            random.seed(seed)
-            smiles = oechem.OECreateCanSmiString(SmilesToOEGraphMol(smiles, True))
-            mol = SmilesToOEGraphMol(smiles, True)
-            self.n_atoms, self.n_bonds = mol.NumAtoms(), mol.NumBonds()
-            self.f_atoms, self.f_bonds = [[0]*ATOM_FDIM for _ in range(self.n_atoms)], [[0]*BOND_FDIM for _ in range(self.n_bonds)]
-            self.a2a, self.a2b = [[] for _ in range(self.n_atoms)], [[] for _ in range(self.n_atoms)]
-            ext_num = math.ceil(args["ratio"]*mol.NumAtoms())
-            
-            mask_list = []
-            while len(mask_list) < ext_num:
-                entire = [atom for atom in mol.GetAtoms() if atom.GetIdx() not in mask_list]
-                center = random.sample(entire, k=1)
-                neighs = [nei for nei in center[0].GetAtoms() if nei.GetIdx() not in mask_list]
-                select = random.sample(neighs, k=min(len(neighs), ext_num-1-len(mask_list)))
-                mask_atoms = center + select
-                mask_list.extend([atom.GetIdx() for atom in mask_atoms])
-            
-            mid_idx = 0
-            sep_smiles = smiles.split(".")
-            for s_smile in sep_smiles:
-                for s_atom in SmilesToOEGraphMol(s_smile).GetAtoms():
-                    idx = s_atom.GetIdx()
-                    if idx + mid_idx in mask_list:
-                        continue
-                    
-                    f_atoms = mol2vec_gen(s_smile, idx)
-                    self.f_atoms[idx + mid_idx] = f_atoms
-
-                mid_idx += idx+1
-            
-            for atom1 in mol.GetAtoms():
-                
-                #マスクされた原子の結合は全て考慮しない
-                if atom1.GetIdx() in mask_list:
-                    continue
-                neigh = [a for a in atom1.GetAtoms() if a.GetIdx() not in mask_list]
-                
-                self.a2a[atom1.GetIdx()] = [a.GetIdx() for a in neigh]
                 bonds = [mol.GetBond(atom1, atom2) for atom2 in neigh]
                 bond_idx = [bond.GetIdx() for bond in bonds]
                 self.a2b[atom1.GetIdx()] = bond_idx

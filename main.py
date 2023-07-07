@@ -6,11 +6,12 @@ import pandas as pd
 from model import *
 from graphconvolution import *
 from functions import SmilesToOEGraphMol
+from typing import List
 
 def NumAtoms(
     data:pd.DataFrame, 
-    targets:list[str]
-    ):
+    targets:List[str],
+    )->pd.DataFrame:
     """
     This function is to calculate the heavy atoms number of molecules in a chemical reaction to decide the fixed length of input.
     """
@@ -84,7 +85,7 @@ parser.add_argument("--batch_size", default=16, type=int, help="batch size used 
 parser.add_argument("--seed", default=0, choices=[0, 5, 33, 42, 49, 51, 53, 62, 65, 97], type=int, help="initializing weights of a model")
 parser.add_argument("--target", default="buchwald-hartwig", type=str, choices=["buchwald-hartwig", "suzuki-miyaura"], help="")
 parser.add_argument("--extrapolation", default="True", type=str, help="")
-parser.add_argument("--tf_layer_num", default=3, type=int, help="number of iterations oftransformer encoder")
+parser.add_argument("--tf_layer_num", default=3, type=int, help="number of iterations of transformer encoder")
 parser.add_argument("--model_name", default="Contrastive", type=str, help="this is used to save some files")
 parse_args = parser.parse_args()
 

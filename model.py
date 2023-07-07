@@ -7,12 +7,13 @@ from torch import optim
 from graphconvolution import *
 from transformer import TransformerEncoder
 from functions import r2_rmse_mae, device, random_seed, tensor_to_numpy, make_batch
-    
+from typing import List
+
 class SimpleDNN(nn.Module):
 
     def __init__(self, 
                 args:dict, 
-                layers:list):
+                layers:List[int]):
 
         super().__init__()
         modules  = [nn.Linear(layers[0], layers[1], bias=args["bias"])]
@@ -272,7 +273,7 @@ class TransformerModel:
         self.optimizer.zero_grad()
         self.model._set_train_eval("train")
         
-        #if you get nan as prediction result, you should not use "with torch.cuda.amp.autocast".
+        ##if you get nan as prediction result, you should not use "with torch.cuda.amp.autocast".
         with torch.cuda.amp.autocast():
             observe = torch.FloatTensor(np.array(round(input["yield"]/100, 3)).reshape(-1, 1)).to(self.device)
             predict = self.model(input)
@@ -299,7 +300,7 @@ class TransformerModel:
         return predict, observe
     
     def _large_test(self, 
-                    datas:list[pd.DataFrame]):
+                    datas:List[pd.DataFrame]):
         
         pre_li, obs_li = list(), list()
         for data in datas:
