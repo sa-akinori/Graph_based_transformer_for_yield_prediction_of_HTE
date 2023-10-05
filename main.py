@@ -110,7 +110,7 @@ if __name__=="__main__":
             train["reaction_id"], test["reaction_id"] = train.index, test.index
             args = {"seed":parse_args.seed, "epoch_num":parse_args.epoch, "step_size":parse_args.step_size, "gamma":parse_args.gamma, "hidden_size":parse_args.hidden_size, 
                     "batch_size":parse_args.batch_size, "columns":columns, "max_length":max(max(train["atoms_num"]), max(test["atoms_num"]))}
-            model = TransformerModel(mpnn_args, tf_args, dnn_args, args, network, type=parse_args.target, sample_num=parse_args.sample_num)
+            model = MPNNTransformerModel(mpnn_args, tf_args, dnn_args, args, network, type=parse_args.target, sample_num=parse_args.sample_num)
             process, pre_tr, pre_te = model.learning_process(train, test)
             
             os.makedirs(f"DataFrame/{parse_args.target}/process/{parse_args.model_name}/sample{parse_args.sample_num}/seed{parse_args.seed}/", exist_ok=True)
@@ -135,7 +135,7 @@ if __name__=="__main__":
                 train["reaction_id"], test["reaction_id"] = train.index, test.set_index
                 args = {"seed":parse_args.seed, "epoch_num":parse_args.epoch, "step_size":parse_args.step_size, "gamma":parse_args.gamma, "hidden_size":parse_args.hidden_size, 
                         "batch_size":batch_size, "columns":columns, "max_length":max(max(train["atoms_num"]), max(test["atoms_num"]))}
-                model = TransformerModel(mpnn_args, tf_args, dnn_args, args, network, type=parse_args.target, sample_num=parse_args.sample_num)
+                model = MPNNTransformerModel(mpnn_args, tf_args, dnn_args, args, network, type=parse_args.target, sample_num=parse_args.sample_num)
                 process, pre_tr, pre_te = model.learning_process(train, test)
                 
                 os.makedirs(f"DataFrame/{parse_args.target}/process/{parse_args.model_name}/sample{parse_args.sample_num}/Ratio{train_size}/seed{parse_args.seed}/", exist_ok=True)
