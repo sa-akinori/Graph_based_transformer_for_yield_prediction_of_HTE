@@ -6,39 +6,43 @@ import torch.nn as nn
 from torch import optim
 from graphconvolution import *
 from transformer import TransformerEncoder
-from functions import r2_rmse_mae, device, random_seed, tensor_to_numpy, make_batch
+from functions import *
 from typing import List
 
 class SimpleDNN(nn.Module):
 
-    def __init__(self, 
-                args:dict, 
-                layers:List[int]):
-
+    def __init__(
+        self, 
+        args:dict, 
+        layers:List[int]
+        ):
         super().__init__()
         modules  = [nn.Linear(layers[0], layers[1], bias=args["bias"])]
-
+        
         for l_num in range(len(layers)-2):
-
+            
             modules.extend([nn.GELU(), nn.Dropout(p=args["dropout_ratio"]), nn.Linear(layers[l_num+1], layers[l_num+2], bias=False)])
             
         self.weight  =  nn.Sequential(*modules)
-
-    def forward(self, 
-                input:torch.Tensor):
-
+        
+    def forward(
+        self, 
+        input:torch.Tensor
+        ):
         return self.weight(input)
     
     
 class BuchwaldHartwigModel(nn.Module):
     
-    def __init__(self, 
-                mpnn_args:dict, 
-                tr_args:dict, 
-                dnn_args:dict, 
-                args:dict, 
-                layer:dict, 
-                sample_num:int):
+    def __init__(
+        self, 
+        mpnn_args:dict, 
+        tr_args:dict, 
+        dnn_args:dict, 
+        args:dict, 
+        layer:dict, 
+        sample_num:int
+        ):
         
         super(BuchwaldHartwigModel, self).__init__()
         random_seed(args["seed"])
@@ -55,8 +59,10 @@ class BuchwaldHartwigModel(nn.Module):
             path = f"DataFrame/pretrain/MolCLR/sample_num{sample_num}/mpnn"
             self.mpnn.load_state_dict(torch.load(path, map_location="cpu"), strict=True)
             
-    def _set_train_eval(self, 
-                        sets:str):
+    def _set_train_eval(
+        self, 
+        sets:str
+        ):
         
         if sets == "train":
             self.mpnn.train()
@@ -70,11 +76,13 @@ class BuchwaldHartwigModel(nn.Module):
             self.pre_yield.eval()
             self.embedding.eval()
             
-    def _save_load(self, 
-                    path:str, 
-                    mode:str=None, 
-                    device:str=None, 
-                    strict:bool=True):
+    def _save_load(
+        self, 
+        path:str, 
+        mode:str=None, 
+        device:str=None, 
+        strict:bool=True
+        ):
         
         dnn_names  = [(self.mpnn, "mpnn"), (self.transformer, "transformer"), (self.pre_yield, "pre_yield"), (self.embedding, "embedding")]
         
@@ -86,10 +94,14 @@ class BuchwaldHartwigModel(nn.Module):
             else:
                 dnn.load_state_dict(torch.load(path+"/"+name, map_location=device), strict=strict)
                 
-    def _make_graph(self, 
-                    data:pd.DataFrame):
+    def _make_graph(
+        self, 
+        data:pd.DataFrame,
+        args:dict
+        ):
         
         mol2vec = pd.read_pickle(f"DataFrame/pretrain/Mol2Vec/buchwald-hartwig.pkl")
+        random_embed = pickle_load("DataFrame/descriptors/random_embed.pkl")
         
         for name in self.args["columns"]:
             
@@ -97,11 +109,17 @@ class BuchwaldHartwigModel(nn.Module):
             
             for smiles in smiles_list:
                 
-                self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                if args["embedding_species"] == "mol2vec":
+                    self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                    
+                elif args["embedding_species"] == "random":
+                    self.graphs[smiles] = RandomMolGraph(smiles, random_embed)
                 
                 
-    def forward(self, 
-                data:pd.DataFrame):
+    def forward(
+        self, 
+        data:pd.DataFrame
+        ):
         
         data = data.reset_index(drop=True)
         max_atoms_num   = self.args["max_length"]
@@ -113,12 +131,12 @@ class BuchwaldHartwigModel(nn.Module):
         aryl_tensor, aryl_scope = self.mpnn([self.graphs[smi] for smi in data["aryl_halide_smiles"]])
         base_tensor, base_scope = self.mpnn([self.graphs[smi] for smi in data["base_smiles"]])
         
-        # add_tensor  += self.embedding(torch.LongTensor([0]*add_tensor.shape[0]).to(self.device))
-        # ani_tensor  += self.embedding(torch.LongTensor([1]*ani_tensor.shape[0]).to(self.device))
-        # lig_tensor  += self.embedding(torch.LongTensor([2]*lig_tensor.shape[0]).to(self.device))
-        # pro_tensor  += self.embedding(torch.LongTensor([3]*pro_tensor.shape[0]).to(self.device))
-        # aryl_tensor += self.embedding(torch.LongTensor([4]*aryl_tensor.shape[0]).to(self.device))
-        # base_tensor += self.embedding(torch.LongTensor([5]*base_tensor.shape[0]).to(self.device))
+        add_tensor  += self.embedding(torch.LongTensor([0]*add_tensor.shape[0]).to(self.device))
+        ani_tensor  += self.embedding(torch.LongTensor([1]*ani_tensor.shape[0]).to(self.device))
+        lig_tensor  += self.embedding(torch.LongTensor([2]*lig_tensor.shape[0]).to(self.device))
+        pro_tensor  += self.embedding(torch.LongTensor([3]*pro_tensor.shape[0]).to(self.device))
+        aryl_tensor += self.embedding(torch.LongTensor([4]*aryl_tensor.shape[0]).to(self.device))
+        base_tensor += self.embedding(torch.LongTensor([5]*base_tensor.shape[0]).to(self.device))
         reactions, masks, self.reaction_scope = list(), list(), list()
         
         for num in range(data.shape[0]):
@@ -154,9 +172,10 @@ class BuchwaldHartwigModel(nn.Module):
     
 class SuzukiMiyauraModel(BuchwaldHartwigModel):
     
-    def forward(self, 
-                data:pd.DataFrame
-                ):
+    def forward(
+        self, 
+        data:pd.DataFrame
+        ):
         
         data = data.reset_index(drop=True)
         max_atoms_num   = self.args["max_length"]
@@ -168,12 +187,12 @@ class SuzukiMiyauraModel(BuchwaldHartwigModel):
         solv_tensor,   solv_scope   =  self.mpnn([self.graphs[smi] for smi in data["washed_Solvent_SMILES"]])
         pro_tensor,    pro_scope    =  self.mpnn([self.graphs[smi] for smi in data["washed_Product_SMILES"]])
         
-        # boron_tensor  += self.embedding(torch.LongTensor([0]*boron_tensor.shape[0]).to(self.device))
-        # halide_tensor += self.embedding(torch.LongTensor([1]*halide_tensor.shape[0]).to(self.device))
-        # lig_tensor    += self.embedding(torch.LongTensor([2]*lig_tensor.shape[0]).to(self.device))
-        # pro_tensor    += self.embedding(torch.LongTensor([3]*pro_tensor.shape[0]).to(self.device))
-        # solv_tensor   += self.embedding(torch.LongTensor([4]*solv_tensor.shape[0]).to(self.device))
-        # reag_tensor   += self.embedding(torch.LongTensor([5]*reag_tensor.shape[0]).to(self.device))
+        boron_tensor  += self.embedding(torch.LongTensor([0]*boron_tensor.shape[0]).to(self.device))
+        halide_tensor += self.embedding(torch.LongTensor([1]*halide_tensor.shape[0]).to(self.device))
+        lig_tensor    += self.embedding(torch.LongTensor([2]*lig_tensor.shape[0]).to(self.device))
+        pro_tensor    += self.embedding(torch.LongTensor([3]*pro_tensor.shape[0]).to(self.device))
+        solv_tensor   += self.embedding(torch.LongTensor([4]*solv_tensor.shape[0]).to(self.device))
+        reag_tensor   += self.embedding(torch.LongTensor([5]*reag_tensor.shape[0]).to(self.device))
         reactions, masks, self.reaction_scope, self.reaction_center = list(), list(), list(), list()
         
         for num in range(data.shape[0]):
@@ -206,28 +225,39 @@ class SuzukiMiyauraModel(BuchwaldHartwigModel):
         yields = self.pre_yield(yields)
         return yields
         
-    def _make_graph(self, 
-                    data:pd.DataFrame):
+    def _make_graph(
+        self, 
+        data:pd.DataFrame,
+        args
+        ):
         
         mol2vec = pd.read_pickle(f"DataFrame/pretrain/Mol2Vec/suzuki-miyaura.pkl")
+        random_embed = pickle_load("DataFrame/descriptors/random_embed.pkl")
+        
         for name in self.args["columns"]:
             
             smiles_list = list(set([cpds for cpds in data[name]]))
             
             for smiles in smiles_list:
                 
-                self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                if args["embedding_species"] == "mol2vec":
+                    self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                    
+                elif args["embedding_species"] == "random":
+                    self.graphs[smiles] = RandomMolGraph(smiles, random_embed)
                 
 class MPNNTransformerModel:
     
-    def __init__(self, 
-                mpnn_args:dict, 
-                tr_args:dict, 
-                dnn_args:dict, 
-                args:dict, 
-                layer:list, 
-                type:str, 
-                sample_num:int):
+    def __init__(
+        self, 
+        mpnn_args:dict, 
+        tr_args:dict, 
+        dnn_args:dict, 
+        args:dict, 
+        layer:list, 
+        type:str, 
+        sample_num:int
+        ):
         
         self.args = args
         self.device = device()
@@ -242,7 +272,16 @@ class MPNNTransformerModel:
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=args["step_size"], gamma=args["gamma"])
         self.scaler = torch.cuda.amp.GradScaler()
         
-    def _model_type(self, mpnn_args, tr_args, dnn_args, args, layer, type, sample_num):
+    def _model_type(
+        self,
+        mpnn_args:dict,
+        tr_args:dict,
+        dnn_args:dict,
+        args:dict,
+        layer:List[int],
+        type:str,
+        sample_num
+        ):
         
         if type == "buchwald-hartwig":
             return BuchwaldHartwigModel(mpnn_args, tr_args, dnn_args, args, layer, sample_num)
@@ -253,27 +292,34 @@ class MPNNTransformerModel:
         else:
             raise ValueError(f"{type} model doesn't exist")
             
-    def save_load_model(self, 
-                        path:str, 
-                        mode:str=None, 
-                        device:str=None, 
-                        strict:bool=True):
+    def save_load_model(
+        self, 
+        path:str, 
+        mode:str=None, 
+        device:str=None, 
+        strict:bool=True
+        ):
         
         self.model._save_load(path, mode, device, strict)
     
-    def make_graph(self, datas):
+    def make_graph(
+        self,
+        datas
+        ):
         
         for data in datas:
             
-            self.model._make_graph(data)
+            self.model._make_graph(data, self.args)
             
-    def batch_train(self, 
-                    input:pd.DataFrame):
+    def batch_train(
+        self, 
+        input:pd.DataFrame
+        ):
 
         self.optimizer.zero_grad()
         self.model._set_train_eval("train")
         
-        ##if you get nan as prediction result, you should not use "with torch.cuda.amp.autocast".
+        #if you get nan as prediction result, you should not use "with torch.cuda.amp.autocast".
         with torch.cuda.amp.autocast():
             observe = torch.FloatTensor(np.array(round(input["yield"]/100, 3)).reshape(-1, 1)).to(self.device)
             predict = self.model(input)
@@ -288,8 +334,10 @@ class MPNNTransformerModel:
         # loss.backward()
         # self.optimizer.step()
         
-    def test(self, 
-            data:pd.DataFrame):
+    def test(
+        self, 
+        data:pd.DataFrame
+        ):
         
         self.model._set_train_eval(sets="eval")
         predict = self.model(data)
@@ -299,8 +347,10 @@ class MPNNTransformerModel:
         
         return predict, observe
     
-    def _large_test(self, 
-                    datas:List[pd.DataFrame]):
+    def _large_test(
+        self, 
+        datas:List[pd.DataFrame]
+        ):
         
         pre_li, obs_li = list(), list()
         for data in datas:
@@ -313,9 +363,11 @@ class MPNNTransformerModel:
         return pre_np*100, obs_np*100
             
         
-    def learning_process(self, 
-                        train:pd.DataFrame, 
-                        test:pd.DataFrame):
+    def learning_process(
+        self, 
+        train:pd.DataFrame, 
+        test:pd.DataFrame
+        ):
         
         self.make_graph([train, test])
         result_all_list = list()
@@ -332,7 +384,7 @@ class MPNNTransformerModel:
     
                 self.batch_train(batch)
             
-            if self.args["epoch_num"] - epoch <= 10:
+            if epoch >= self.args["start_eval_epoch"]:
                 
                 #Since train and test data are too large to be put in memory all at once, there are divided into some parts.
                 tr_data = [train.loc[i:i+int(train.shape[0]/20)-1, :] for i in range(0, train.shape[0], int(train.shape[0]/20))] 
@@ -358,12 +410,14 @@ class MPNNTransformerModel:
 #Only MPNN model
 class BuchwaldHartwigMPNNModel(nn.Module):
     
-    def __init__(self, 
-                mpnn_args:dict,
-                dnn_args:dict, 
-                args:dict, 
-                layer:dict, 
-                sample_num:int):
+    def __init__(
+        self, 
+        mpnn_args:dict,
+        dnn_args:dict, 
+        args:dict, 
+        layer:dict, 
+        sample_num:int
+        ):
         
         super(BuchwaldHartwigMPNNModel, self).__init__()
         random_seed(args["seed"])
@@ -377,8 +431,10 @@ class BuchwaldHartwigMPNNModel(nn.Module):
             path = f"DataFrame/pretrain/MolCLR/sample_num{sample_num}/mpnn"
             self.mpnn.load_state_dict(torch.load(path, map_location="cpu"), strict=True)
             
-    def _set_train_eval(self, 
-                        sets:str):
+    def _set_train_eval(
+        self, 
+        sets:str
+        ):
         
         if sets == "train":
             self.mpnn.train()
@@ -388,11 +444,13 @@ class BuchwaldHartwigMPNNModel(nn.Module):
             self.mpnn.eval()
             self.pre_yield.eval()
             
-    def _save_load(self, 
-                    path:str, 
-                    mode:str=None, 
-                    device:str=None, 
-                    strict:bool=True):
+    def _save_load(
+        self, 
+        path:str, 
+        mode:str=None, 
+        device:str=None, 
+        strict:bool=True
+        ):
         
         dnn_names  = [(self.mpnn, "mpnn"), (self.pre_yield, "pre_yield")]
         
@@ -404,10 +462,14 @@ class BuchwaldHartwigMPNNModel(nn.Module):
             else:
                 dnn.load_state_dict(torch.load(path+"/"+name, map_location=device), strict=strict)
                 
-    def _make_graph(self, 
-                    data:pd.DataFrame):
+    def _make_graph(
+        self, 
+        data:pd.DataFrame,
+        args:dict,
+        ):
         
         mol2vec = pd.read_pickle(f"DataFrame/pretrain/Mol2Vec/buchwald-hartwig.pkl")
+        random_embed = pickle_load("DataFrame/descriptors/random_embed.pkl")
         
         for name in self.args["columns"]:
             
@@ -415,11 +477,17 @@ class BuchwaldHartwigMPNNModel(nn.Module):
             
             for smiles in smiles_list:
                 
-                self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                if args["embedding_species"] == "mol2vec":
+                    self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                    
+                elif args["embedding_species"] == "random":
+                    self.graphs[smiles] = RandomMolGraph(smiles, random_embed)
                 
                 
-    def forward(self, 
-                data:pd.DataFrame):
+    def forward(
+        self, 
+        data:pd.DataFrame
+        ):
         
         data = data.reset_index(drop=True)
         
@@ -450,9 +518,10 @@ class BuchwaldHartwigMPNNModel(nn.Module):
     
 class SuzukiMiyauraMPNNModel(BuchwaldHartwigMPNNModel):
     
-    def forward(self, 
-                data:pd.DataFrame
-                ):
+    def forward(
+        self, 
+        data:pd.DataFrame
+        ):
         
         data = data.reset_index(drop=True)
         
@@ -481,10 +550,14 @@ class SuzukiMiyauraMPNNModel(BuchwaldHartwigMPNNModel):
         
         return yields
                 
-    def _make_graph(self, 
-                    data:pd.DataFrame):
+    def _make_graph(
+        self, 
+        data:pd.DataFrame,
+        args:dict
+        ):
         
         mol2vec = pd.read_pickle(f"DataFrame/pretrain/Mol2Vec/suzuki-miyaura.pkl")
+        random_embed = pickle_load("DataFrame/descriptors/random_embed.pkl")
         
         for name in self.args["columns"]:
             
@@ -492,18 +565,24 @@ class SuzukiMiyauraMPNNModel(BuchwaldHartwigMPNNModel):
             
             for smiles in smiles_list:
                 
-                self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                if args["embedding_species"] == "mol2vec":
+                    self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                    
+                elif args["embedding_species"] == "random":
+                    self.graphs[smiles] = RandomMolGraph(smiles, random_embed)
                 
                 
 class MPNNModel(MPNNTransformerModel):
     
-    def __init__(self, 
-                mpnn_args:dict, 
-                dnn_args:dict, 
-                args:dict, 
-                layer:list, 
-                type:str, 
-                sample_num:int):
+    def __init__(
+        self, 
+        mpnn_args:dict, 
+        dnn_args:dict, 
+        args:dict, 
+        layer:list, 
+        type:str, 
+        sample_num:int
+        ):
         
         self.args = args
         self.device = device()
@@ -518,7 +597,15 @@ class MPNNModel(MPNNTransformerModel):
         self.scheduler = optim.lr_scheduler.StepLR(self.optimizer, step_size=args["step_size"], gamma=args["gamma"])
         self.scaler = torch.cuda.amp.GradScaler()
         
-    def _model_type(self, mpnn_args, dnn_args, args, layer, type, sample_num):
+    def _model_type(
+        self,
+        mpnn_args:dict,
+        dnn_args:dict,
+        args:dict,
+        layer:List[int],
+        type:str,
+        sample_num:int
+        ):
         
         if type == "buchwald-hartwig":
             return BuchwaldHartwigMPNNModel(mpnn_args, dnn_args, args, layer, sample_num)
@@ -533,12 +620,13 @@ class MPNNModel(MPNNTransformerModel):
 #Transformer only model
 class BuchwaldHartwigTransformer(nn.Module):
     
-    def __init__(self,
-                tr_args:dict, 
-                dnn_args:dict, 
-                args:dict, 
-                layer:dict
-                ):
+    def __init__(
+        self,
+        tr_args:dict, 
+        dnn_args:dict, 
+        args:dict, 
+        layer:dict
+        ):
         
         super(BuchwaldHartwigTransformer, self).__init__()
         random_seed(args["seed"])
@@ -551,8 +639,10 @@ class BuchwaldHartwigTransformer(nn.Module):
         self.embedding = nn.Embedding(8, args["hidden_size"]).to(self.device)
         
             
-    def _set_train_eval(self, 
-                        sets:str):
+    def _set_train_eval(
+        self, 
+        sets:str
+        ):
         
         if sets == "train":
             self.transformer.train()
@@ -564,11 +654,13 @@ class BuchwaldHartwigTransformer(nn.Module):
             self.pre_yield.eval()
             self.embedding.eval()
             
-    def _save_load(self, 
-                    path:str, 
-                    mode:str=None, 
-                    device:str=None, 
-                    strict:bool=True):
+    def _save_load(
+        self, 
+        path:str, 
+        mode:str=None, 
+        device:str=None, 
+        strict:bool=True
+        ):
         
         dnn_names  = [(self.transformer, "transformer"), (self.pre_yield, "pre_yield"), (self.embedding, "embedding")]
         
@@ -580,10 +672,14 @@ class BuchwaldHartwigTransformer(nn.Module):
             else:
                 dnn.load_state_dict(torch.load(path+"/"+name, map_location=device), strict=strict)
                 
-    def _make_graph(self, 
-                    data:pd.DataFrame):
+    def _make_graph(
+        self, 
+        data:pd.DataFrame,
+        args:dict
+        ):
         
         mol2vec = pd.read_pickle(f"DataFrame/pretrain/Mol2Vec/buchwald-hartwig.pkl")
+        random_embed = pickle_load("DataFrame/descriptors/random_embed.pkl")
         
         for name in self.args["columns"]:
             
@@ -591,13 +687,22 @@ class BuchwaldHartwigTransformer(nn.Module):
             
             for smiles in smiles_list:
                 
-                self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                if args["embedding_species"] == "mol2vec":
+                    self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                    
+                elif args["embedding_species"] == "random":
+                    self.graphs[smiles] = RandomMolGraph(smiles, random_embed)
                 
-    def _insert_graph(self, graph):
+    def _insert_graph(
+        self,
+        graph
+        ):
         self.graphs = graph
                 
-    def forward(self, 
-                data:pd.DataFrame):
+    def forward(
+        self, 
+        data:pd.DataFrame
+        ):
         
         data = data.reset_index(drop=True)
         max_atoms_num = self.args["max_length"]
@@ -650,9 +755,10 @@ class BuchwaldHartwigTransformer(nn.Module):
     
 class SuzukiMiyauraTransformer(BuchwaldHartwigTransformer):
     
-    def forward(self, 
-                data:pd.DataFrame
-                ):
+    def forward(
+        self, 
+        data:pd.DataFrame
+        ):
         
         data = data.reset_index(drop=True)
         max_atoms_num   = self.args["max_length"]
@@ -702,10 +808,13 @@ class SuzukiMiyauraTransformer(BuchwaldHartwigTransformer):
         yields = self.pre_yield(yields)
         return yields
         
-    def _make_graph(self, 
-                    data:pd.DataFrame):
+    def _make_graph(
+        self, 
+        data:pd.DataFrame,
+        args:dict):
         
         mol2vec = pd.read_pickle(f"DataFrame/pretrain/Mol2Vec/suzuki-miyaura.pkl")
+        random_embed = pickle_load("DataFrame/descriptors/random_embed.pkl")
         
         for name in self.args["columns"]:
             
@@ -713,18 +822,23 @@ class SuzukiMiyauraTransformer(BuchwaldHartwigTransformer):
             
             for smiles in smiles_list:
                 
-                self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                if args["embedding_species"] == "mol2vec":
+                    self.graphs[smiles] = MolGraph(smiles, mol2vec)
+                    
+                elif args["embedding_species"] == "random":
+                    self.graphs[smiles] = RandomMolGraph(smiles, random_embed)
                 
                 
 class TransformerModel(MPNNTransformerModel):
     
-    def __init__(self,
-                tr_args:dict, 
-                dnn_args:dict, 
-                args:dict, 
-                layer:list, 
-                type:str
-                ):
+    def __init__(
+        self,
+        tr_args:dict, 
+        dnn_args:dict, 
+        args:dict, 
+        layer:list, 
+        type:str
+        ):
         
         self.args = args
         self.device = device()

@@ -2,7 +2,8 @@
 import random
 import torch
 import numpy as np
-import pandas as pd 
+import pandas as pd
+import pickle
 from openeye.oechem import *
 
 def reshape(obj, size):
@@ -100,3 +101,19 @@ def SmilesToOEGraphMol(smiles, strict=False):
         return None
     else:
         return mol
+    
+def pickle_load(
+    path : str
+    ):
+    with open(path, 'rb') as f:
+        data = pickle.load(f)
+        
+    return data
+    
+def pickle_save(
+    path : str, 
+    data,
+    protocol=5
+):
+    with open(f"{path}.pkl", 'wb') as f:
+        pickle.dump(data, f, protocol=protocol)

@@ -6,14 +6,16 @@ from functions import device
 
 class BatchMultiHeadAttentionUnit(nn.Module):
     
-    def __init__(self, args:dict):
+    def __init__(
+        self,
+        args:dict
+        ):
         
         super(BatchMultiHeadAttentionUnit,self).__init__()
         
         self.args     = args
         self.head_num = args["multi_head_num"]
         self.act_func = nn.GELU()
-
         self.W_q = nn.Linear(args["hidden_size"], args["hidden_size"], bias=False)
         self.W_k = nn.Linear(args["hidden_size"], args["hidden_size"], bias=False)
         self.W_v = nn.Linear(args["hidden_size"], args["hidden_size"], bias=False)
@@ -21,8 +23,14 @@ class BatchMultiHeadAttentionUnit(nn.Module):
         self.att_drop = nn.Dropout(p=args["dropout_ratio"])
         self.out_drop = nn.Dropout(p=args["dropout_ratio"])
         
-    def forward(self, value, key, query, mask):
-            
+    def forward(
+        self,
+        value:torch.Tensor,
+        key:torch.Tensor,
+        query:torch.Tensor,
+        mask:torch.Tensor
+        ):
+        
         query, key, value = self._split_head(self.W_q(query)), self._split_head(self.W_k(key)), self._split_head(self.W_v(value))
         mol_matrix, att_w = self._multi_head_attention(query, key, value, mask)
         mol_matrix = self._concat_head(mol_matrix)
@@ -33,24 +41,35 @@ class BatchMultiHeadAttentionUnit(nn.Module):
         
         return mol_matrix
         
-    def _split_head(self, x):
+    def _split_head(
+        self,
+        x:torch.Tensor
+        ):
         
         x_batch, x_index, x_columns = x.size()
         new_x_columns = int(x_columns/self.head_num)
         new_x = torch.reshape(x, (x_batch, x_index, self.head_num, new_x_columns))
-
+        
         return torch.transpose(new_x, 1, 2)
-
-    def _concat_head(self, x):
-
+    
+    def _concat_head(
+        self,
+        x:torch.Tensor
+        ):
+        
         x_batch, x_head, x_index, x_columns = x.size()
         new_x_columns = int(x_columns*x_head)
         x     = torch.transpose(x, 1, 2)
         new_x = torch.reshape(x, (x_batch, x_index, new_x_columns))
-
         return new_x
-
-    def _multi_head_attention(self, query, key, value, mask):
+    
+    def _multi_head_attention(
+        self,
+        query:torch.Tensor,
+        key:torch.Tensor,
+        value:torch.Tensor,
+        mask:torch.Tensor
+        ):
         
         depth  =  list(query.shape)[-1]
         query *=  depth**-0.5
@@ -59,13 +78,16 @@ class BatchMultiHeadAttentionUnit(nn.Module):
         att_w  =  F.softmax(att_w, dim=-1)
         att_w  =  self.att_drop(att_w)
         att_hiddens = torch.matmul(att_w, value)
-
+        
         return att_hiddens, att_w
 
 
 class TransformerEncoderUnit(nn.Module):
     
-    def __init__(self, args:dict):
+    def __init__(
+        self,
+        args:dict
+        ):
         
         super(TransformerEncoderUnit, self).__init__()
         
@@ -82,7 +104,11 @@ class TransformerEncoderUnit(nn.Module):
             self.norm_sa = nn.LayerNorm(args["hidden_size"])
             self.norm_ff = nn.LayerNorm(args["hidden_size"])
         
-    def _self_attention_part(self, input, mask):
+    def _self_attention_part(
+        self,
+        input:torch.Tensor,
+        mask:torch.Tensor
+        ):
         
         residue = input.clone()
         
@@ -99,7 +125,10 @@ class TransformerEncoderUnit(nn.Module):
         
         return input
         
-    def _feedfoward(self, input):
+    def _feedfoward(
+        self,
+        input:torch.Tensor
+        ):
         
         residue = input.clone()
         if self.args["tf_norm"] == "BatchNorm":
@@ -115,21 +144,30 @@ class TransformerEncoderUnit(nn.Module):
         
         return input
         
-    def forward(self, reaction, mask):
+    def forward(
+        self,
+        reaction:torch.Tensor,
+        mask:torch.Tensor
+        ):
         
         reaction = self._self_attention_part(reaction, mask)
         reaction = self._feedfoward(reaction)
         
         return reaction
     
-    def get_attention_weight(self):
+    def get_attention_weight(
+        self
+        ):
         
         return self.self_attention.att_weight.to('cpu').detach().numpy().copy()
 
 
 class TransformerEncoder(nn.Module):
     
-    def __init__(self, args:dict):
+    def __init__(
+        self,
+        args:dict
+        ):
         
         super(TransformerEncoder, self).__init__()
         self.args   = args
@@ -142,7 +180,11 @@ class TransformerEncoder(nn.Module):
         elif args["tf_norm"] == "LayerNorm":
             self.last_norm = nn.LayerNorm(args["hidden_size"])
             
-    def forward(self, output, mask):
+    def forward(
+        self,
+        output:torch.Tensor,
+        mask:torch.Tensor
+        ):
         
         for i in range(len(self.units)):
 

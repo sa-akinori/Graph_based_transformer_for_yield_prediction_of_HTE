@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
-import math
 import torch
-import random
 import numpy as np
 import pandas as pd
 import torch.nn as nn
@@ -21,6 +19,12 @@ def mol2vec_genenrate(smiles:str,
                     mol2vec_pd):
     mol2vec = mol2vec_pd.query("input_washed_smiles == @smiles").reset_index(drop=True)
     return np.hstack(mol2vec.loc[0, atom_idx]).tolist()
+
+def random_embedding(
+    atomic_num:int,
+    random_embed
+    ):
+    return random_embed[atomic_num]
 
 def bond_generate(bond):
     if bond.IsAromatic():
@@ -78,6 +82,49 @@ class MolGraph:
                 for s_atom in SmilesToOEGraphMol(s_smile).GetAtoms():
                     idx = s_atom.GetIdx()
                     f_atoms = mol2vec_genenrate(s_smile, idx, mol2vec)
+                    self.f_atoms[idx + mid_idx] = f_atoms
+
+                mid_idx += idx+1
+                
+            for atom1 in mol.GetAtoms():
+                
+                neigh = [a for a in atom1.GetAtoms()]
+                self.a2a[atom1.GetIdx()] = [a.GetIdx() for a in neigh]
+                
+                bonds = [mol.GetBond(atom1, atom2) for atom2 in neigh]
+                bond_idx = [bond.GetIdx() for bond in bonds]
+                self.a2b[atom1.GetIdx()] = bond_idx
+
+                for b_id, bond in zip(bond_idx, bonds):
+                    
+                    f_bond = bond_generate(bond)
+                    self.f_bonds[b_id] = f_bond
+                    
+
+class RandomMolGraph:
+
+    def __init__(self, 
+                smiles:str, 
+                random_embed):
+
+        if smiles == "None":
+            self.n_atoms, self.n_bonds = 0, 0
+            self.f_atoms, self.f_bonds = [], []
+            self.a2a, self.a2b = [], []
+
+        else:
+            smiles = oechem.OECreateCanSmiString(SmilesToOEGraphMol(smiles, True))
+            mol = SmilesToOEGraphMol(smiles, True)
+            self.n_atoms, self.n_bonds = mol.NumAtoms(), mol.NumBonds()
+            self.f_atoms, self.f_bonds = [[] for _ in range(self.n_atoms)], [[] for _ in range(self.n_bonds)]
+            self.a2a, self.a2b = [[] for _ in range(self.n_atoms)], [[] for _ in range(self.n_atoms)]
+            
+            mid_idx = 0
+            sep_smiles = smiles.split(".")
+            for s_smile in sep_smiles:
+                for s_atom in SmilesToOEGraphMol(s_smile).GetAtoms():
+                    idx = s_atom.GetIdx()
+                    f_atoms = random_embedding(s_atom.GetAtomicNum(), random_embed)
                     self.f_atoms[idx + mid_idx] = f_atoms
 
                 mid_idx += idx+1
@@ -194,14 +241,13 @@ class MPNEncoder(nn.Module):
         input = self.W_i(f_atoms)
         self_message, message = input, input
         self_message[0, :], message[0, :] = 0, 0
-
+        
         for depth in range(self.args["depth"]):
         
             nei_a_message = index_select_ND(message, a2a)
             nei_f_bonds   = index_select_ND(f_bonds, a2b)
             n_message = torch.cat([nei_a_message, nei_f_bonds], dim=2)
             message   = n_message.sum(dim=1)
-
             message = eval(f"self.W_h{depth}(message)")
             self_message = self_message + message
             message = self_message
@@ -223,8 +269,8 @@ class MPN(nn.Module):
                 ):
 
         super(MPN, self).__init__()
-        self.args      = args
-        self.encoder   = MPNEncoder(self.args, ATOM_FDIM, BOND_FDIM)
+        self.args    = args
+        self.encoder = MPNEncoder(self.args, ATOM_FDIM, BOND_FDIM)
         
     def forward(self,
                 batch) -> torch.FloatTensor:
