@@ -4,7 +4,7 @@ import sys
 import argparse
 import numpy as np
 import pandas as pd
-from functions import r2_rmse_mae
+from functions import *
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--sample_num", default=0, choices=[0, 3000000], type=int, help="This number represents number of compounds were used to train Contrastive Learning. We can select a number in [0, 3000000]")
@@ -18,7 +18,7 @@ def necessary_member(
     
     if args.target == "buchwald-hartwig":
         columns = ["aniline_smiles", "additive_smiles", "aryl_halide_smiles", "ligand_smiles", "base_smiles", "product_smiles"]
-        names = [f"Test{num}" for num in range(1, 5)]
+        names = [f"Test{num}" for num in range(1, 5)] + [f"new_Test{num}" for num in range(1, 21)]
         
     elif args.target == "suzuki-miyaura":
         columns = ["Organoboron_SMILES", "Organic_Halide_SMILES", "Solvent_SMILES", "Reagent_SMILES", "Ligand_SMILES", "Product_SMILES"]
@@ -132,8 +132,11 @@ if __name__=="__main__":
         for name in names:
             predicts = list()
             for seed in seeds:
-                predict = pd.read_csv(f"DataFrame/{parse_args.target}/process/Random/sample{parse_args.sample_num}/seed{seed}/{name}.csv", index_col=0)
-                predicts.append(np.mean(np.array(predict.loc[predict.shape[0]-1,"test_R2"]).reshape(-1, 1), axis=1))
+                try:
+                    predict = pd.read_csv(f"DataFrame/{parse_args.target}/process/Random/sample{parse_args.sample_num}/seed{seed}/{name}.csv", index_col=0)
+                    predicts.append(np.mean(np.array(predict.loc[predict.shape[0]-1,"test_R2"]).reshape(-1, 1), axis=1))
+                except:
+                    print(seed)
             predicts = np.concatenate(predicts)
             result.append([name, np.mean(predicts), np.std(predicts)])
         result = pd.DataFrame(result, columns=["name", "mean_R2", "std_R2"])
