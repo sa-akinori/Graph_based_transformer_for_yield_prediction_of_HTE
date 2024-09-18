@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
+import os
 import random
 import torch
 import numpy as np
 import pandas as pd
 import pickle
 from openeye.oechem import *
+
+BASEPATH = os.path.dirname(__file__)
 
 def reshape(obj, size):
     """
@@ -39,15 +42,18 @@ def r2_rmse_mae(yp, yobs, verbose=False):
 def random_seed(
     seed:int
     ):
-
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.manual_seed(seed)
+    """
+    To ensure reproducibility, I introduced 'torch.use_deterministic_algorithms'.
+    The system requires os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8' when we introduce 'torch.use_deterministic_algorithms'.
+    """
+    os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
     random.seed(seed)
     np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.use_deterministic_algorithms(True)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    torch.use_deterministic_algorithms = True
     
 def tensor_to_numpy(
     x:torch.Tensor
@@ -117,3 +123,33 @@ def pickle_save(
 ):
     with open(f"{path}.pkl", 'wb') as f:
         pickle.dump(data, f, protocol=protocol)
+        
+def necessary_member(args):
+    
+    if args.target == "buchwald-hartwig":
+        columns = ["aniline_smiles", "additive_smiles", "aryl_halide_smiles", "ligand_smiles", "base_smiles", "product_smiles"]
+        
+        if eval(args.extrapolation):
+            
+            if args.extrapolation_role == "additive":
+                names = [f"Test{num}" for num in range(1, 5)]
+            
+            elif args.extrapolation_role == "three-roles":
+                names = [f"new_Test{num}" for num in range(1, 21)]
+            
+        else:
+            names = ["FullCV_01", "FullCV_02", "FullCV_03", "FullCV_04", "FullCV_05", "FullCV_06", "FullCV_07", "FullCV_08", "FullCV_09", "FullCV_10"]
+        
+    elif args.target == "suzuki-miyaura":
+        columns = ["Organoboron_SMILES", "Organic_Halide_SMILES", "Solvent_SMILES", "Reagent_SMILES", "Ligand_SMILES", "Product_SMILES"]
+        
+        if eval(args.extrapolation):
+            names = [f"Test{num}" for num in range(1, 13)]
+            
+        else:
+            names = ["FullCV_01", "FullCV_02", "FullCV_03", "FullCV_04", "FullCV_05", "FullCV_06", "FullCV_07", "FullCV_08", "FullCV_09", "FullCV_10"]
+    else:
+        raise ValueError(f"{args.target} is invalid")
+    
+    columns = [f"washed_{col}" for col in columns]
+    return columns, names
