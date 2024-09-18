@@ -30,7 +30,7 @@ def necessary_member():
             names = [f"Test{num}" for num in range(1, 5)]
         
         elif parse_args.extrapolation_role == "three-roles":
-            names = [f"new_Test{num}" for num in range(1, 21)]
+            names = [f"sTest{num}" for num in range(1, 21)]
 
     elif parse_args.target == "suzuki-miyaura":
         columns = ["Organoboron_SMILES", "Organic_Halide_SMILES", "Solvent_SMILES", "Reagent_SMILES", "Ligand_SMILES", "Product_SMILES"]

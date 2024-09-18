@@ -18,7 +18,7 @@ def necessary_member(
     
     if args.target == "buchwald-hartwig":
         columns = ["aniline_smiles", "additive_smiles", "aryl_halide_smiles", "ligand_smiles", "base_smiles", "product_smiles"]
-        names = [f"Test{num}" for num in range(1, 5)] + [f"new_Test{num}" for num in range(1, 21)]
+        names = [f"Test{num}" for num in range(1, 5)] + [f"sTest{num}" for num in range(1, 21)]
         
     elif args.target == "suzuki-miyaura":
         columns = ["Organoboron_SMILES", "Organic_Halide_SMILES", "Solvent_SMILES", "Reagent_SMILES", "Ligand_SMILES", "Product_SMILES"]
