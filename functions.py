@@ -135,7 +135,7 @@ def necessary_member(args):
                 names = [f"Test{num}" for num in range(1, 5)]
             
             elif args.extrapolation_role == "three-roles":
-                names = [f"new_Test{num}" for num in range(1, 21)]
+                names = [f"sTest{num}" for num in range(1, 21)]
             
         else:
             names = ["FullCV_01", "FullCV_02", "FullCV_03", "FullCV_04", "FullCV_05", "FullCV_06", "FullCV_07", "FullCV_08", "FullCV_09", "FullCV_10"]
